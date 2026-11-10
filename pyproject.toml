@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kreyol-captioner"
+version = "0.1.0"
+description = "Local Haitian Creole transcription, captions, and review tooling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = ["faster-whisper>=1.1,<2", "av>=14,<17"]
+
+[project.optional-dependencies]
+ui = ["gradio>=5.49,<6"]
+ml = ["scikit-learn>=1.5,<2"]
+
+[project.scripts]
+kreyol-captioner = "kreyol_captioner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
