@@ -1,0 +1,155 @@
+{
+  "model": "base",
+  "split": "dev",
+  "device": "cpu",
+  "compute_type": "int8",
+  "decode_options": {
+    "language": "ht",
+    "task": "transcribe",
+    "beam_size": 5,
+    "word_timestamps": true,
+    "vad_filter": true,
+    "condition_on_previous_text": false
+  },
+  "normalization": "NFC, casefold, punctuation removed",
+  "overall": {
+    "utterances": 146,
+    "word": {
+      "errors": 3160,
+      "reference_units": 3161,
+      "rate": 0.999683644416324,
+      "substitutions": 2439,
+      "deletions": 528,
+      "insertions": 193
+    },
+    "char": {
+      "errors": 4821,
+      "reference_units": 11452,
+      "rate": 0.4209745022703458,
+      "substitutions": 2989,
+      "deletions": 959,
+      "insertions": 873
+    }
+  },
+  "empty_hypotheses": 0,
+  "audio_seconds": 1493.7728749999999,
+  "processing_seconds": 286.0811599579174,
+  "real_time_factor": 0.19151583533602284,
+  "by_group": {
+    "BAMW": {
+      "utterances": 111,
+      "word": {
+        "errors": 2414,
+        "reference_units": 2404,
+        "rate": 1.0041597337770383,
+        "substitutions": 1907,
+        "deletions": 370,
+        "insertions": 137
+      },
+      "char": {
+        "errors": 3933,
+        "reference_units": 8936,
+        "rate": 0.440129811996419,
+        "substitutions": 2429,
+        "deletions": 761,
+        "insertions": 743
+      }
+    },
+    "DFMN": {
+      "utterances": 18,
+      "word": {
+        "errors": 388,
+        "reference_units": 384,
+        "rate": 1.0104166666666667,
+        "substitutions": 280,
+        "deletions": 64,
+        "insertions": 44
+      },
+      "char": {
+        "errors": 451,
+        "reference_units": 1337,
+        "rate": 0.337322363500374,
+        "substitutions": 285,
+        "deletions": 91,
+        "insertions": 75
+      }
+    },
+    "EAFW": {
+      "utterances": 6,
+      "word": {
+        "errors": 127,
+        "reference_units": 132,
+        "rate": 0.9621212121212122,
+        "substitutions": 97,
+        "deletions": 30,
+        "insertions": 0
+      },
+      "char": {
+        "errors": 161,
+        "reference_units": 447,
+        "rate": 0.36017897091722595,
+        "substitutions": 103,
+        "deletions": 43,
+        "insertions": 15
+      }
+    },
+    "EFMN": {
+      "utterances": 3,
+      "word": {
+        "errors": 72,
+        "reference_units": 78,
+        "rate": 0.9230769230769231,
+        "substitutions": 51,
+        "deletions": 21,
+        "insertions": 0
+      },
+      "char": {
+        "errors": 79,
+        "reference_units": 223,
+        "rate": 0.3542600896860987,
+        "substitutions": 47,
+        "deletions": 20,
+        "insertions": 12
+      }
+    },
+    "EWFE": {
+      "utterances": 1,
+      "word": {
+        "errors": 16,
+        "reference_units": 18,
+        "rate": 0.8888888888888888,
+        "substitutions": 10,
+        "deletions": 6,
+        "insertions": 0
+      },
+      "char": {
+        "errors": 28,
+        "reference_units": 55,
+        "rate": 0.509090909090909,
+        "substitutions": 16,
+        "deletions": 12,
+        "insertions": 0
+      }
+    },
+    "EXFS": {
+      "utterances": 7,
+      "word": {
+        "errors": 143,
+        "reference_units": 145,
+        "rate": 0.9862068965517241,
+        "substitutions": 94,
+        "deletions": 37,
+        "insertions": 12
+      },
+      "char": {
+        "errors": 169,
+        "reference_units": 454,
+        "rate": 0.3722466960352423,
+        "substitutions": 109,
+        "deletions": 32,
+        "insertions": 28
+      }
+    }
+  },
+  "utterances_wer_ge_1": 85
+}

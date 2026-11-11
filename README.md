@@ -143,8 +143,9 @@ human review; it does not automatically rewrite the ASR output or improve raw WE
 
 Start by auditing the [CMU Haitian Creole speech corpus mirror](https://huggingface.co/datasets/Frostie08/cmu_haitian_creole_speech).
 It lists 6,385 examples, speaker metadata, and CMU's original license conditions.
-This project does not download the full corpus automatically or assume the mirror's
-train partition is suitable for speaker-independent evaluation.
+`kreyol-captioner prepare-cmu` downloads it only when you run it (see the log below).
+The mirror's single train partition is not suitable for speaker-independent evaluation
+as-is.
 
 Recommended sequence:
 
@@ -164,10 +165,108 @@ are a small end-to-end example. The video is CC BY-SA 4.0; follow the applicable
 attribution and license requirements. Community subtitles need checking against
 audio; do not assume they are error-free benchmark labels.
 
+## CMU dataset preparation log (November 10, 2026)
+
+Steps taken to build speaker-separated train/dev/test sets from the CMU mirror
+(step 3 of the sequence above). Nothing was transcribed or trained in this stage.
+
+1. **Checked readiness for training.** All six existing `runs/*/review.csv` files had
+   empty `label` columns and only 5 segments in total (the trainer needs 20+ labeled
+   segments, both classes, 3+ groups). `train-review` was therefore not run.
+2. **Read the dataset card.** 6,385 rows in a single `train` split, five parquet shards
+   (about 2 GB), no validation/test splits, `gender` is "Unknown", and `speaker_id`
+   just repeats `audio_id`. CMU's notice requires keeping the copyright notice,
+   marking modifications, and acknowledging the source in any published work.
+3. **Installed `pyarrow`** and added an optional `data` extra to `pyproject.toml`
+   (`pyarrow`, `huggingface_hub`). Re-ran `pip install -e ".[ui,ml,data]"` because
+   `.venv` was still pointing at an older copy of the project in `~/Documents/Codex/`.
+4. **Added `src/kreyol_captioner/data.py` and the `prepare-cmu` command.** It downloads
+   the parquet shards, writes one WAV per utterance (16 kHz mono), skips byte-identical
+   audio and empty transcripts, assigns whole speaker groups to a single split, then
+   removes dev/test rows whose normalized text also appears in train.
+5. **Tested on shard 0 only**, which exposed a problem: the first speaker rule
+   (text before `_`) made 1,919 "speakers" across the full set because IDs come in
+   several formats (`BLMW_4D14`, `BCMN0215`, `new-Y08`). The rule now uses the leading
+   letters of the ID. This is an **inferred group, not a verified speaker label**.
+6. **Added a unit test** for speaker separation, ID parsing, and text-overlap removal
+   (20 tests pass; ruff clean).
+7. **Ran the full preparation** with seed 42:
+
+```bash
+kreyol-captioner prepare-cmu --output data/cmu
+```
+
+| Split | Utterances | Groups | Words |
+| --- | --- | --- | --- |
+| train | 4,831 | 97 | 92,396 |
+| dev | 146 | 6 | 3,175 |
+| test | 73 | 9 | 1,481 |
+
+1,011 dev/test rows were removed because the same sentence occurs in train. No group
+appears in more than one split.
+
+**Output** (`data/cmu/`, git-ignored): `audio/*.wav`, `references/<audio_id>.txt`
+(usable with `evaluate --reference`), `train.jsonl`, `dev.jsonl`, `test.jsonl`, and
+`summary.json`.
+
+**Known limits**
+- Groups are very uneven (`BCMN` has 1,446 train utterances; dev is 111 `BAMW`), so the
+  dev and test sets are small and dominated by a few groups. Treat WER from them as
+  rough. Changing `--seed`, `--dev`, or `--test` gives different splits.
+- Many sentences are Bible-style passages, so results may not carry over to
+  conversational speech like the Castelline video.
+- The transcripts have not been audited by a Haitian Creole speaker (sequence step 1).
+- The shards also remain in the Hugging Face cache (`~/.cache/huggingface`, about 1.9 GB
+  of blobs); that copy can be deleted once `data/cmu` is built.
+- Cite CMU as the source and keep its notice when publishing anything using this data.
+
+**Baseline (done):** `kreyol-captioner benchmark --split dev --model small` measures
+corpus WER/CER with the app's decoding settings and writes results to `evaluations/`.
+Pretrained `small` scored about 83% WER / 27% CER on dev and 84% / 28% on test;
+`base` was about 100% WER. See [VALIDATION.md](VALIDATION.md) for details and limits.
+
+## Data cleaning and fine-tuning setup log (November 10, 2026)
+
+Steps taken to prepare fine-tuning. **No full fine-tuning run has been done yet**; it
+needs a GPU. See [training/README.md](training/README.md) for how to run it.
+
+1. **Checked for corrupted audio.** All 6,061 WAV files decode, and all are 16 kHz.
+   The damage is inside the audio: some files end early and are padded with digital
+   zeros (mostly the `BLMW` set), some are almost silent, some exceed Whisper's 30-second
+   window, and some are too short or too long for their transcript.
+2. **Added `kreyol-captioner clean-cmu`** (`src/kreyol_captioner/clean.py`). It applies
+   fixed rules to every split and writes `<split>.clean.jsonl`, `<split>.rejected.jsonl`
+   (with reasons) and `clean_summary.json`. Text is NFC-normalized, straight and curly
+   double quotes are removed, `’` becomes `'`, and whitespace is collapsed. Numbers are left
+   as written (466 transcripts contain digits).
+
+| Split | Kept | Rejected | Main reasons |
+| --- | --- | --- | --- |
+| train | 4,775 | 56 | truncated 33, speech rate doesn't fit text 35, near-silent 8, all-zero 6, over 30 s 3, control characters 2 |
+| dev | 145 | 1 | under 1 s |
+| test | 72 | 1 | speech too fast for the text |
+
+   One file can have several reasons.
+3. **Started a transcript-mismatch screen** for train: pretrained `small` transcribes every
+   kept train file, and `clean-cmu --asr-results ...` then drops train items with CER ≥ 0.8.
+   This is for train only, so held-out sets are not filtered by model difficulty.
+4. **Added `training/finetune_whisper_lora.py`** (LoRA on `openai/whisper-small` with
+   Transformers and PEFT; dependencies in `training/requirements-train.txt`, kept out of the
+   app). It evaluates dev WER during training, keeps the best adapter, stops early, refuses
+   test rows, merges the adapter, and converts to a faster-whisper model.
+5. **Smoke-tested the training script on this Mac** with `whisper-tiny`, 32 train and 8 dev
+   clips, in a separate environment. It trained, evaluated, saved, merged and converted,
+   and the converted model ran in `kreyol-captioner benchmark`. This tests only the code,
+   **not accuracy**. The test found and fixed a crash in DataLoader workers on macOS and
+   a converter call that used the wrong Python environment.
+6. **Added `app --model <folder>`** to show a fine-tuned model in the app's model choices,
+   and fixed `benchmark` file names for local model paths.
+7. 24 tests pass; ruff passes for `src/`, `tests/` and `training/`.
+
 ## Development
 
-See [VALIDATION.md](VALIDATION.md) for the initial real-media and browser checks,
-observed accuracy limitations, and tested environment. `requirements.txt`
+See [VALIDATION.md](VALIDATION.md) for the benchmark results, observed accuracy
+limitations, and tested environment. `requirements.txt`
 records the third-party versions used for that environment; it is not a universal
 lockfile for every operating system.
 

@@ -1,0 +1,8 @@
+# GPU training environment (Colab/Kaggle). Not needed to run the app.
+# Colab already ships torch with CUDA; install torch yourself elsewhere.
+transformers>=4.45,<5
+peft>=0.13
+accelerate>=0.34
+av>=14,<17
+numpy
+ctranslate2>=4.4

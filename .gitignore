@@ -8,3 +8,5 @@ runs/
 data/
 .DS_Store
 .ruff_cache/
+finetuned/
+evaluations/train-screen/

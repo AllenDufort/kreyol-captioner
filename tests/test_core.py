@@ -177,3 +177,83 @@ class WorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DataSplitTests(unittest.TestCase):
+    def test_speakers_never_shared_and_text_overlap_dropped(self):
+        from kreyol_captioner.data import drop_text_overlap, speaker_of, split_by_speaker
+        self.assertEqual(speaker_of("BLMW_4D14"), "BLMW")
+        self.assertEqual(speaker_of("BCMN0215"), "BCMN")
+        self.assertEqual(speaker_of("new-Y08"), "NEW")
+        records = [{"audio_id": f"S{s}_{i}", "speaker": f"S{s}", "text": f"fraz {s} {i}"}
+                   for s in range(20) for i in range(10)]
+        records.append({"audio_id": "S0_dup", "speaker": "S0", "text": "Menm fraz!"})
+        records.append({"audio_id": "S19_dup", "speaker": "S19", "text": "menm fraz"})
+        splits = split_by_speaker(records, 0.1, 0.1, seed=1)
+        owners = {}
+        for name, rows in splits.items():
+            for row in rows:
+                owners.setdefault(row["speaker"], set()).add(name)
+        self.assertTrue(all(len(names) == 1 for names in owners.values()))
+        self.assertEqual(sum(map(len, splits.values())), len(records))
+        self.assertTrue(splits["dev"] and splits["test"])
+        before = sum(map(len, splits.values()))
+        dropped = drop_text_overlap(splits)
+        train_text = {r["text"].casefold().strip("!") for r in splits["train"]}
+        for name in ("dev", "test"):
+            self.assertFalse(any(r["text"].casefold().strip("!") in train_text for r in splits[name]))
+        self.assertEqual(sum(map(len, splits.values())), before - dropped)
+
+
+class BenchmarkTests(unittest.TestCase):
+    def test_pooled_rate_is_total_errors_over_total_units(self):
+        from kreyol_captioner.benchmark import _pool
+        def row(errors, units):
+            counts = {"errors": errors, "reference_units": units, "substitutions": errors,
+                      "deletions": 0, "insertions": 0}
+            return {"word": counts, "char": counts}
+        pooled = _pool([row(1, 2), row(9, 98)])
+        self.assertEqual(pooled["word"]["rate"], 10 / 100)  # not the mean of 0.5 and ~0.09
+        self.assertEqual(pooled["utterances"], 2)
+
+    def test_fake_model_end_to_end(self):
+        from kreyol_captioner import benchmark
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dev.jsonl").write_text(json.dumps(
+                {"audio_id": "A_1", "speaker": "A", "audio": "a.wav", "text": "Mwen pale kreyòl."}) + "\n",
+                encoding="utf-8")
+            seg = SimpleNamespace(text=" mwen pale kreyol")
+            model = SimpleNamespace(transcribe=lambda *a, **k: ([seg], SimpleNamespace(duration=2.0)))
+            with patch.object(benchmark, "get_model", return_value=model):
+                summary = benchmark.run_benchmark(root, "dev", "fake", root / "out")
+            self.assertAlmostEqual(summary["overall"]["word"]["rate"], 1 / 3)
+            self.assertTrue((root / "out" / "dev-fake.utterances.jsonl").exists())
+
+
+class CleanTests(unittest.TestCase):
+    def test_text_cleanup(self):
+        from kreyol_captioner.clean import clean_text
+        text, problems = clean_text('" "se konbyen  pitit’ ou?')
+        self.assertEqual(text, "se konbyen pitit' ou?")
+        self.assertEqual(problems, [])
+        self.assertIn("control_character", clean_text("lè ou pa sèvi ak z\x1bai")[1])
+        self.assertIn("too_few_words", clean_text("wi")[1])
+
+    def test_audio_rules(self):
+        import numpy as np
+
+        from kreyol_captioner.clean import audio_problems
+        sr = 16000
+        rng = np.random.default_rng(0)
+        speech = (0.1 * rng.standard_normal(sr * 4)).astype(np.float32)
+        self.assertEqual(audio_problems(speech, sr, 10), [])
+        truncated = np.concatenate([speech[:sr], np.zeros(sr * 3, np.float32)])
+        self.assertIn("truncated", audio_problems(truncated, sr, 10))
+        gap = speech.copy()
+        gap[sr:sr + sr // 2] = 0
+        self.assertIn("dropout", audio_problems(gap, sr, 10))
+        self.assertIn("near_silent", audio_problems(speech * 0.001, sr, 10))
+        self.assertIn("speech_rate_too_fast_for_text", audio_problems(speech, sr, 40))
+        self.assertIn("too_long", audio_problems(np.tile(speech, 8), sr, 80))
+        self.assertIn("all_zero", audio_problems(np.zeros(sr * 2, np.float32), sr, 5))

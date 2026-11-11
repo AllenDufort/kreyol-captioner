@@ -17,6 +17,9 @@ from .subtitles import make_captions, validate_captions, write_subtitles
 
 EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".wav", ".mp3", ".m4a",
               ".flac", ".ogg", ".aac", ".opus", ".aiff", ".wma"}
+# Shared by captioning and benchmarking so measured accuracy matches the app.
+DECODE_OPTIONS = {"language": "ht", "task": "transcribe", "beam_size": 5, "word_timestamps": True,
+                  "vad_filter": True, "condition_on_previous_text": False}
 
 
 @lru_cache(maxsize=1)
@@ -56,10 +59,7 @@ def run(
         progress(0.05, desc="Loading speech recognition model")
     started = time.perf_counter()
     model = get_model(model_name, device, compute_type, str(cache_dir.resolve()), offline)
-    predicted, info = model.transcribe(
-        str(source), language="ht", task="transcribe", beam_size=5,
-        word_timestamps=True, vad_filter=True, condition_on_previous_text=False,
-    )
+    predicted, info = model.transcribe(str(source), **DECODE_OPTIONS)
     segments = []
     for raw in predicted:
         if not raw.text.strip() or raw.end <= raw.start:

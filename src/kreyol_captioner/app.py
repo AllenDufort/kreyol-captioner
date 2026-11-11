@@ -30,7 +30,8 @@ def save_reviewed(rows: list, state: dict) -> tuple[list[str], str]:
     return [str(srt), str(vtt), str(reviewed)], "Edits saved. Download the reviewed subtitle files below."
 
 
-def build_app(*, output: Path, cache_dir: Path, offline: bool = False, review_model: Path | None = None):
+def build_app(*, output: Path, cache_dir: Path, offline: bool = False, review_model: Path | None = None,
+              custom_model: Path | None = None):
     try:
         import gradio as gr
     except ImportError as error:
@@ -86,7 +87,11 @@ def build_app(*, output: Path, cache_dir: Path, offline: bool = False, review_mo
             with gr.Column(scale=1):
                 source = gr.File(label="1. Choose audio or video", type="filepath",
                                  file_types=sorted(EXTENSIONS))
-                model = gr.Radio(["tiny", "base", "small"], value="base", label="Speech model",
+                choices = ["tiny", "base", "small"]
+                if custom_model:
+                    choices.append((f"custom: {custom_model.name}", str(custom_model.resolve())))
+                model = gr.Radio(choices, value=str(custom_model.resolve()) if custom_model else "base",
+                                 label="Speech model",
                                  info="Start with base. Compare small for accuracy or tiny for speed.")
                 generate_button = gr.Button("Generate Haitian Creole captions", variant="primary")
                 method = "A trained classifier suggests" if review_model else "Preliminary review rules suggest"
@@ -118,8 +123,11 @@ def build_app(*, output: Path, cache_dir: Path, offline: bool = False, review_mo
 
 
 def launch(*, port: int = 7860, output: Path = Path("runs"), cache_dir: Path = Path(".cache/models"),
-           offline: bool = False, review_model: Path | None = None) -> None:
+           offline: bool = False, review_model: Path | None = None, custom_model: Path | None = None) -> None:
+    if custom_model and not (custom_model / "model.bin").is_file():
+        raise ValueError(f"{custom_model} is not a faster-whisper (CTranslate2) model folder.")
     # No public tunnel and no network listener beyond localhost.
-    demo = build_app(output=output, cache_dir=cache_dir, offline=offline, review_model=review_model)
+    demo = build_app(output=output, cache_dir=cache_dir, offline=offline, review_model=review_model,
+                     custom_model=custom_model)
     demo.queue(max_size=8).launch(server_name="127.0.0.1", server_port=port,
                                  share=False, show_api=False, inbrowser=False)
